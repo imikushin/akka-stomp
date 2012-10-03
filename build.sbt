@@ -1,3 +1,5 @@
+organization := "com.heromq"
+
 name := "heromq-akka"
 
 version := "0.1"
