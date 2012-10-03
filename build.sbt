@@ -1,6 +1,6 @@
 organization := "com.heromq"
 
-name := "heromq-akka"
+name := "akka-stomp"
 
 version := "0.1"
 
