@@ -4,8 +4,6 @@ import akka.actor.Actor
 import javax.jms.{Destination, Session}
 import org.fusesource.stomp.jms.StompJmsConnectionFactory
 
-case object Begin
-
 trait MessagingStyle {
   def destinationName: String
   def createDestination(session: Session): Destination

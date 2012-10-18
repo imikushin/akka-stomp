@@ -6,7 +6,15 @@ import grizzled.slf4j.Logging
 import javax.jms._
 import scala.collection.mutable
 
+object ConsumerActor {
+
+  case object Begin
+
+}
+
 trait ConsumerActor extends MqActor with Logging {thisEnv: MessagingStyle =>
+
+  import ConsumerActor._
 
   val limit = 10
   protected val consumedMap = mutable.Map[Long, Message]()
