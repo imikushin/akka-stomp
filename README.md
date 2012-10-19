@@ -1,8 +1,10 @@
 # akka-stomp
 A simple Akka based framework enabling actors to communicate with STOMP message brokers.
 
-**ConsumerActor** - consumes messages from a broker.  
-**ProducerActor** - produces messages to a broker.  
+## Framework Actors
+**ConsumerActor** - consumes messages from a broker. The `worker` actor will receive the consumed messages, and it MUST send back a Status.Success message to the `sender` to acknowledge that it received the consumed message.  
+**ProducerActor** - produces messages to a broker. 
+
 **MQ** - messaging style mixin enabling consumers and producers to work with message queues.  
 **PubSub** - messaging style mixin enabling consumers and producers to work with pubsub topics. 
 
@@ -10,7 +12,7 @@ A simple Akka based framework enabling actors to communicate with STOMP message 
 **ContainerActor** - simple actor with empty `receive`. Used for, well, containing other actors.  
 **RecoverableActor** - hands over the current message to the next incarnation of the current actor while restarting. Used to prevent message loss on actor restart. 
 
-Example:
+## Example
 ```scala
 class Resender(broker: String, qFrom: String, qTo: String) extends ContainerActor {
 
