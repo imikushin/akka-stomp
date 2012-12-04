@@ -16,7 +16,6 @@ object ConsumerActor {
   case class Target(ref: ActorRef) extends Data
 
   case class SendTo(ref: ActorRef)
-  case object Finished
 
 }
 
@@ -29,46 +28,45 @@ trait ConsumerActor extends MqActor with MessagingStyle with FSM[State, Data] wi
   startWith(Initial, Empty)
 
   when(Initial) {
-    case Event(SendTo(ref), _) => goto(Sending) using Target(ref)
+    case Event(SendTo(ref), _) => consumeAndMaybeSend(ref)
   }
 
-  when(Sending) {
-    case Event(SendTo(ref), _) => goto(Sending) using Target(ref)
-    case Event(Finished, _) => goto(Initial) using Empty
+  when(Sending, 1 second) {
+    case Event(StateTimeout, Target(ref)) => consumeAndMaybeSend(ref)
+    case Event(SendTo(ref), _) => consumeAndMaybeSend(ref)
   }
 
   whenUnhandled {
-    case Event(ufo, data) => stay() using {
+    case Event(ufo, data) => {
       warn("Unhandled: state = " + stateName + ", msg = " + ufo)
-      data
+      stay()
     }
+  }
+
+  def consume(): Option[Any] = Option(messageConsumer.receiveNoWait) match {
+    case Some(message) => {
+      message.acknowledge()
+      info("Consumed: MessageID == " + message.getJMSMessageID)
+      message match {
+        case message: TextMessage => Some(message.getText)
+        case message: ObjectMessage => Some(message.getObject)
+        case _ => None
+      }
+    }
+    case _ => None
+  }
+
+  def consumeAndMaybeSend(ref: ActorRef) = consume() match {
+    case Some(msg) => {
+      ref ! msg
+      goto(Initial) using Empty
+    }
+    case None => goto(Sending) using Target(ref)
   }
 
   onTransition {
     case _ -> Sending => {
       trace("trying to consume message...")
-      nextStateData match {
-        case Target(ref) => {
-          Option(messageConsumer.receiveNoWait) match {
-            case Some(message) => {
-              val content = message match {
-                case message: TextMessage => message.getText
-                case message: ObjectMessage => message.getObject
-              }
-              ref ! content
-              message.acknowledge()
-              info("Sent ACK for message == '" + content + "', MessageID == " + message.getJMSMessageID)
-              self ! Finished
-            }
-            case None => {
-              setTimer(self.toString(), SendTo(ref), 1 second, repeat = false)
-            }
-          }
-        }
-        case ufo => {
-          warn("OMG! UFO: " + ufo)
-        }
-      }
     }
   }
 

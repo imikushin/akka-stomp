@@ -2,7 +2,7 @@ organization := "com.heromq"
 
 name := "akka-stomp"
 
-version := "0.3-SNAPSHOT"
+version := "0.3"
 
 scalaVersion := "2.9.1"
 
