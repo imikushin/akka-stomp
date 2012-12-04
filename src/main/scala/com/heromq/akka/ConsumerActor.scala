@@ -35,8 +35,16 @@ trait ConsumerActor extends MqActor with MessagingStyle with FSM[State, Data] wi
   }
 
   when(Sending) {
+    case Event(SendTo(ref), _) => goto(Sending) using Target(ref)
     case Event(Tick, Target(ref)) => goto(Sending) using Target(ref)
     case Event(Finished, _) => goto(Initial) using Empty
+  }
+
+  whenUnhandled {
+    case Event(ufo, data) => stay() using {
+      warn("Unhandled: state = " + this.stateName + ", msg = " + ufo)
+      data
+    }
   }
 
   onTransition {
@@ -44,17 +52,20 @@ trait ConsumerActor extends MqActor with MessagingStyle with FSM[State, Data] wi
       trace("trying to consume message...")
       nextStateData match {
         case Target(ref) => {
-          Option(messageConsumer.receiveNoWait) map {message =>
-            val content = message match {
-              case message: TextMessage => message.getText
-              case message: ObjectMessage => message.getObject
+          Option(messageConsumer.receiveNoWait) match {
+            case Some(message) => {
+              val content = message match {
+                case message: TextMessage => message.getText
+                case message: ObjectMessage => message.getObject
+              }
+              ref ! content
+              message.acknowledge()
+              info("Sent ACK for message == '" + content + "', MessageID == " + message.getJMSMessageID)
+              self ! Finished
             }
-            ref ! content
-            message.acknowledge()
-            info("Sent ACK for message == '" + content + "', MessageID == " + message.getJMSMessageID)
-            self ! Finished
-          } getOrElse {
-            setTimer(self.toString(), Tick, 1 second, repeat = false)
+            case None => {
+              setTimer(self.toString(), Tick, 1 second, repeat = false)
+            }
           }
         }
         case ufo => {
