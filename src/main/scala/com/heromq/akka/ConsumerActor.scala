@@ -1,95 +1,69 @@
 package com.heromq.akka
 
-import akka.actor.{Actor, Props, ActorRef}
+import akka.actor.{FSM, ActorRef}
 import akka.util.duration._
 import grizzled.slf4j.Logging
 import javax.jms._
-import scala.collection.mutable
 
 object ConsumerActor {
 
-  case object Begin
+  sealed trait State
+  case object Initial extends State
+  case object Sending extends State
+
+  sealed trait Data
+  case object Empty extends Data
+  case class Target(ref: ActorRef) extends Data
+
+  case class SendTo(ref: ActorRef)
+
+  case object Tick
+  case object Finished
 
 }
 
-trait ConsumerActor extends MqActor with Logging {thisEnv: MessagingStyle =>
+import ConsumerActor._
 
-  import ConsumerActor._
-
-  val limit = 10
-  protected val consumedMap = mutable.Map[Long, Message]()
-  protected val processedMap = mutable.Map[Long, Message]()
-  var count: Long = 0
-
-  def worker: ActorRef
+trait ConsumerActor extends MqActor with MessagingStyle with FSM[State, Data] with Logging {
 
   val messageConsumer = session.createConsumer(destination)
 
-  override def preStart() {
-    connection.start()
-    self ! Begin
-    info("started receiving")
+  startWith(Initial, Empty)
+
+  when(Initial) {
+    case Event(SendTo(ref), _) => goto(Sending) using Target(ref)
   }
 
-  protected def receive = (fetchContent andThen processAndAcknowledge) orElse receivePlain
-
-  protected def fetchContent: PartialFunction[Any, Any] = {
-    case message: TextMessage => message -> message.getText
-    case message: ObjectMessage => message -> message.getObject
+  when(Sending) {
+    case Event(Tick, Target(ref)) => goto(Sending) using Target(ref)
+    case Event(Finished, _) => goto(Initial) using Empty
   }
 
-  protected def processAndAcknowledge: Receive = {
-    case (message: Message, content: Any) => {
-      count += 1
-      val msgIndex = count
-      debug("consumed: msgIndex == " + msgIndex + ", MessageID == " + message.getJMSMessageID)
-      consumedMap += (msgIndex -> message)
-      info("Processing: " + message.getJMSMessageID + ": " + content)
-      context.actorOf(Props(new Actor {
-        worker ! content
-        protected def receive = {
-          case s => {
-            info("Processing: " + message.getJMSMessageID + ": " + content + "  ...  Done.")
-            context.parent ! msgIndex
-            context.stop(self)
+  onTransition {
+    case _ -> Sending => {
+      trace("trying to consume message...")
+      nextStateData match {
+        case Target(ref) => {
+          Option(messageConsumer.receiveNoWait) map {message =>
+            val content = message match {
+              case message: TextMessage => message.getText
+              case message: ObjectMessage => message.getObject
+            }
+            ref ! content
+            message.acknowledge()
+            info("Sent ACK for message == '" + content + "', MessageID == " + message.getJMSMessageID)
+            self ! Finished
+          } getOrElse {
+            setTimer(self.toString(), Tick, 1 second, repeat = false)
           }
         }
-      }))
-      if (consumedMap.size + processedMap.size < limit) {
-        self ! Begin
+        case ufo => {
+          warn("OMG! UFO: " + ufo)
+        }
       }
     }
   }
 
-  def receivePlain: Receive = {
-    case Begin => {
-      trace("trying to consume message...")
-      Option(messageConsumer.receiveNoWait) map {self ! _} getOrElse {
-        context.system.scheduler.scheduleOnce(1 second) {
-          self ! Begin
-        }
-      }
-    }
-    case msgIndex: Long => {
-      consumedMap.remove(msgIndex) map {message =>
-        debug("processed msgIndex == " + msgIndex + ", MessageID == " + message.getJMSMessageID)
-        processedMap += (msgIndex -> message)
-      }
-      debug("consumedMap.keySet.min == " + (consumedMap.keySet reduceOption {_ min _}))
-      if (consumedMap.isEmpty || consumedMap.keySet.min > msgIndex) {
-        val sortedKeys = processedMap.keySet.toSeq.sorted
-        val diff = sortedKeys.head
-        val prefix = sortedKeys.zipWithIndex takeWhile {case (e, i) => e - i == diff} map {_._1}
-        val ackMsgIndex = prefix.last
-        val message = processedMap(ackMsgIndex)
-        prefix foreach {processedMap.remove(_)}
-        message.acknowledge()
-        info("Sent ACK for msgIndex == " + ackMsgIndex + ", MessageID == " + message.getJMSMessageID)
-      }
-      if (consumedMap.size + processedMap.size < limit) {
-        self ! Begin
-      }
-    }
-  }
+  initialize
 
 }
