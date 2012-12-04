@@ -16,8 +16,6 @@ object ConsumerActor {
   case class Target(ref: ActorRef) extends Data
 
   case class SendTo(ref: ActorRef)
-
-  case object Tick
   case object Finished
 
 }
@@ -36,13 +34,12 @@ trait ConsumerActor extends MqActor with MessagingStyle with FSM[State, Data] wi
 
   when(Sending) {
     case Event(SendTo(ref), _) => goto(Sending) using Target(ref)
-    case Event(Tick, Target(ref)) => goto(Sending) using Target(ref)
     case Event(Finished, _) => goto(Initial) using Empty
   }
 
   whenUnhandled {
     case Event(ufo, data) => stay() using {
-      warn("Unhandled: state = " + this.stateName + ", msg = " + ufo)
+      warn("Unhandled: state = " + stateName + ", msg = " + ufo)
       data
     }
   }
@@ -64,7 +61,7 @@ trait ConsumerActor extends MqActor with MessagingStyle with FSM[State, Data] wi
               self ! Finished
             }
             case None => {
-              setTimer(self.toString(), Tick, 1 second, repeat = false)
+              setTimer(self.toString(), SendTo(ref), 1 second, repeat = false)
             }
           }
         }
