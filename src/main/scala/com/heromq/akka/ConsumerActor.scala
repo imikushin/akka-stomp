@@ -37,7 +37,7 @@ trait ConsumerActor extends MqActor with MessagingStyle with FSM[State, Data] wi
   }
 
   whenUnhandled {
-    case Event(ufo, data) => {
+    case Event(ufo, _) => {
       warn("Unhandled: state = " + stateName + ", msg = " + ufo)
       stay()
     }
