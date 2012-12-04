@@ -61,12 +61,9 @@ trait ConsumerActor extends MqActor with MessagingStyle with FSM[State, Data] wi
       ref ! msg
       goto(Initial) using Empty
     }
-    case None => goto(Sending) using Target(ref)
-  }
-
-  onTransition {
-    case _ -> Sending => {
+    case None => {
       trace("trying to consume message...")
+      goto(Sending) using Target(ref)
     }
   }
 
