@@ -1,12 +1,14 @@
 # akka-stomp
 A simple Akka based framework enabling actors to communicate with STOMP message brokers.
 
-## Framework Actor Traits
+## Framework Traits
 **com.heromq.akka.ConsumerActor** - consumes messages from a STOMP broker. Send it a SendTo(actorRef):
 ConsumerActor will consume a message from the STOMP broker and send its payload to the passed actorRef.
+
 **com.heromq.akka.ProducerActor** - produces messages to a STOMP broker.
 
 **com.heromq.akka.MQ** - messaging style mixin enabling consumers and producers to work with message queues.
+
 **com.heromq.akka.PubSub** - messaging style mixin enabling consumers and producers to work with pubsub topics.
 
 ## Utility Traits
