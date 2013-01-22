@@ -1,43 +1,49 @@
 # akka-stomp
 A simple Akka based framework enabling actors to communicate with STOMP message brokers.
 
-## Framework Actors
-**ConsumerActor** - consumes messages from a broker. The `worker` actor will receive the consumed messages, and it MUST send back a Status.Success message to the `sender` to acknowledge that it received the consumed message.  
-**ProducerActor** - produces messages to a broker. 
+## Framework Actor Traits
+**com.heromq.akka.ConsumerActor** - consumes messages from a STOMP broker. Send it a SendTo(actorRef):
+ConsumerActor will consume a message from the STOMP broker and send its payload to the passed actorRef.
+**com.heromq.akka.ProducerActor** - produces messages to a STOMP broker.
 
-**MQ** - messaging style mixin enabling consumers and producers to work with message queues.  
-**PubSub** - messaging style mixin enabling consumers and producers to work with pubsub topics. 
+**com.heromq.akka.MQ** - messaging style mixin enabling consumers and producers to work with message queues.
+**com.heromq.akka.PubSub** - messaging style mixin enabling consumers and producers to work with pubsub topics.
 
-## Utility Actors
-**ContainerActor** - simple actor with empty `receive`. Used for, well, containing other actors.  
-**RecoverableActor** - hands over the current message to the next incarnation of the current actor while restarting. Used to prevent message loss on actor restart. 
+## Utility Traits
+**com.heromq.akka.ContainerActor** - simple actor with empty `receive`. Used for, well, containing other actors.
+**com.heromq.akka.RecoverableActor** - hands over the current message to the next incarnation of the current actor while restarting.
+Used to prevent message loss on actor restart.
 
 ## Example
 ```scala
-class Resender(broker: String, qFrom: String, qTo: String) extends ContainerActor {
+package com.example
 
-  val producer = context.actorOf(Props(newProducer))
-  val worker = context.actorOf(Props(newWorker(producer)))
-  val consumer = context.actorOf(Props(newConsumer(worker)))
+import akka.actor.{Actor, Props}
+import com.heromq.akka.ConsumerActor.SendTo
+import com.heromq.akka.ContainerActor
+import com.heromq.client.{MQConsumerActor, MQProducerActor}
 
-  def newConsumer(next: ActorRef) = new ConsumerActor with MQ {
-    def brokerUri: String = broker
-    def worker: ActorRef = next
-    def destinationName: String = qFrom
-  }
+class Repeater(broker: String, qFrom: String, qTo: String) extends ContainerActor {
 
-  def newWorker(producer: ActorRef) = new Actor {
+  val consumer = context.actorOf(Props(new MQConsumerActor(broker, qFrom)))
+  val producer = context.actorOf(Props(new MQProducerActor(broker, qTo)))
+
+  val worker = context.actorOf(Props(newWorker))
+
+  protected def newWorker = new Actor {
+
+    consumer ! SendTo(self)
+
     protected def receive = {
-      case msg: AnyRef => {
-        producer ! msg
-        sender ! Status.Success(msg)
+      case msg => {
+        try {
+          producer ! msg
+        } finally {
+          consumer ! SendTo(self)
+        }
       }
     }
-  }
 
-  def newProducer = new ProducerActor with MQ {
-    def brokerUri: String = broker
-    def destinationName: String = qTo
   }
 
 }
