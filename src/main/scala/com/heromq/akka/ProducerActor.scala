@@ -19,6 +19,6 @@ trait ProducerActor extends MqActor with Logging {thisEnv: MessagingStyle =>
     }
   }
 
-  protected def receive = createMessage andThen sendMessage
+  def receive = createMessage andThen sendMessage
 
 }

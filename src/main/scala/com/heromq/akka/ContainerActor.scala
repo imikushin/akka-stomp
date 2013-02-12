@@ -5,7 +5,7 @@ import grizzled.slf4j.Logging
 
 trait ContainerActor extends Actor with Logging {
 
-  protected def receive = {
+  def receive = {
     case m => unhandled(m)
   }
 

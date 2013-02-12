@@ -1,9 +1,9 @@
 package com.heromq.akka
 
 import akka.actor.{FSM, ActorRef}
-import akka.util.duration._
 import grizzled.slf4j.Logging
 import javax.jms._
+import scala.concurrent.duration._
 
 object ConsumerActor {
 
@@ -31,7 +31,7 @@ trait ConsumerActor extends MqActor with MessagingStyle with FSM[State, Data] wi
     case Event(SendTo(ref), _) => consumeAndMaybeSend(ref)
   }
 
-  when(Sending, 1 second) {
+  when(Sending, 1.second) {
     case Event(StateTimeout, Target(ref)) => consumeAndMaybeSend(ref)
     case Event(SendTo(ref), _) => consumeAndMaybeSend(ref)
   }
